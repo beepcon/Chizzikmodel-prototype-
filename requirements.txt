@@ -1,0 +1,22 @@
+# 라이카 실행에 필요한 패키지
+#
+# ahttp-client 는 반드시 1.1.0 이어야 한다.
+# 2.0.0 에서 ahttp_client.extension 모듈이 사라져 chzzkpy import 가 실패한다.
+ahttp-client==1.1.0
+chzzkpy==2.1.5
+
+customtkinter
+anthropic
+requests
+sounddevice
+soundfile
+numpy
+scipy
+mss
+pillow
+faster-whisper
+keyboard
+
+# faster-whisper 를 CUDA 로 돌리기 위한 DLL
+nvidia-cublas-cu12
+nvidia-cudnn-cu12

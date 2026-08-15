@@ -1,0 +1,16 @@
+# 개인 설정 (API 키 포함)
+config.json
+
+# 빌드 결과물
+build/
+dist/
+*.spec
+__pycache__/
+
+# 음성 파일 및 모델 가중치 (용량 + 권리)
+refs/
+*.wav
+*.mp3
+*.flac
+*.pth
+*.ckpt
