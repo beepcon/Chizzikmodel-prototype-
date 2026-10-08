@@ -1,16 +1,56 @@
-# 개인 설정 (API 키 포함)
+# ===== 개인 정보 =====
+# config.json 에는 API 키, vts_token.json 에는 VTube Studio 인증 토큰이 들어 있다.
+# sessions / debug_audio 는 방송 대화와 마이크 녹음이다.
 config.json
+vts_token.json
+sessions/
+debug_audio/
 
-# 빌드 결과물
+# ===== 빌드 결과물 =====
 build/
 dist/
 *.spec
 __pycache__/
 
-# 음성 파일 및 모델 가중치 (용량 + 권리)
+# ===== 음성 파일, 모델 가중치, 외부 프로그램 (용량 + 권리) =====
 refs/
+GPT-SoVITS-v2pro-20250604/
+tts_samples/
+tts_samples_eng/
 *.wav
 *.mp3
 *.flac
 *.pth
 *.ckpt
+*.zip
+
+# ===== 백업본 =====
+*.bak
+*.bak_*
+*.bak2_*
+*.bak3_*
+*.bak4_*
+*.bak5_*
+*.bak6_*
+*.bak7_*
+*.bak8_*
+
+# ===== 돌리면 다시 생기는 것 (로그, 측정 결과, 기계가 만든 자료) =====
+*.log
+*.log.1
+*.csv
+*.png
+vts_hotkeys.json
+eng_words_from_sessions.json
+hand_fix.json
+emotion_test_result.json
+debug_compare_*.json
+laika_ac_check.json
+laika_empty_check.json
+laika_emotion_text_test.json
+laika_english_llm_test.json
+laika_english_tts_test.json
+laika_latency_check.json
+laika_nospeech_check.json
+laika_stream_diag.json
+laika_tts_mode_sample.json

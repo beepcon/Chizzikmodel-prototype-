@@ -1,0 +1,46 @@
+Copyright (c) 2026 라이카 (Laika)
+
+이 저작물은 크리에이티브 커먼즈 저작자표시-비영리 4.0 국제 라이선스에 따라
+이용할 수 있습니다.
+
+This work is licensed under the Creative Commons
+Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
+
+전문(한국어): https://creativecommons.org/licenses/by-nc/4.0/deed.ko
+Full text (English): https://creativecommons.org/licenses/by-nc/4.0/legalcode
+
+
+허용되는 것
+-----------
+- 공유    : 어떤 매체나 형식으로든 복제하고 재배포할 수 있습니다
+- 변경    : 리믹스, 변형하거나 2차적 저작물을 만들 수 있습니다
+
+
+조건
+-----------
+- 저작자표시(BY)
+  적절한 출처를 밝히고, 변경이 있었다면 그 사실을 표시해야 합니다.
+
+- 비영리(NC)
+  이 저작물을 영리 목적으로 이용할 수 없습니다.
+
+
+면책
+-----------
+이 저작물은 어떠한 보증도 없이 있는 그대로 제공됩니다.
+사용으로 인해 발생하는 어떠한 손해에 대해서도 저작자는 책임지지 않습니다.
+
+
+제3자 구성요소
+-----------
+이 프로젝트는 아래 소프트웨어를 별도로 설치해 함께 사용합니다.
+각 소프트웨어는 자체 라이선스를 따르며, 이 저장소에 포함되어 있지 않습니다.
+
+- GPT-SoVITS       (MIT)
+- faster-whisper   (MIT)
+- CustomTkinter    (MIT)
+- chzzkpy          (MIT)
+- VB-Audio Virtual Cable, VTube Studio (각 배포처 약관)
+
+음성 모델과 참조 음성은 이 저장소에 포함되지 않습니다.
+사용자는 이용 권리가 확인된 음성 데이터만 사용해야 합니다.

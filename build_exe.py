@@ -50,11 +50,13 @@ def build():
         "--add-data", f"{BASE / 'laika_core.py'};.",
         "--add-data", f"{BASE / 'laika_refmaker.py'};.",
         "--add-data", f"{BASE / 'laika_setup.py'};.",
+        "--add-data", f"{BASE / 'laika_capture.py'};.",
 
         # PyInstaller 가 동적 import 를 찾지 못하는 것들
         "--hidden-import", "laika_core",
         "--hidden-import", "laika_refmaker",
         "--hidden-import", "laika_setup",
+        "--hidden-import", "laika_capture",
         "--hidden-import", "anthropic",
         "--hidden-import", "chzzkpy",
         "--hidden-import", "chzzkpy.unofficial",
@@ -88,7 +90,14 @@ def build():
         return
 
     out_dir = BASE / "dist" / APP_NAME
-    for name in ("사용법.txt",):
+    # 실행 폴더에 같이 있어야 하는 자료 파일.
+    # exe 는 _base_dir() 가 exe 폴더를 보므로, 없으면 그 기능이 조용히 죽는다.
+    #   laika_eng_dict.json  없으면 영어가 한 글자씩 읽힌다 (자동 생성 안 됨)
+    #   vts_emotion_map.json 없으면 표정이 안 바뀐다
+    #   word_filter.txt      없으면 금칙어 필터가 비어 있다
+    for name in ("사용법.txt", "laika_eng_dict.json", "tts_dict.json",
+                 "vts_emotion_map.json", "word_filter.txt", "word_allow.txt",
+                 "stt_vocab.txt"):
         src = BASE / name
         if src.exists():
             shutil.copy(src, out_dir / name)
