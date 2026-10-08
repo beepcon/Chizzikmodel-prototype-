@@ -93,12 +93,7 @@ API 키, 목소리 합성기, 아바타 설정은 같은 폴더의
 | `laika_history.py` | 대화 기록 유지와 저장 |
 | `laika_metrics.py` | 응답 구간별 시간 기록 (`metrics.csv`) |
 | `laika_metrics_view.py` | 위 기록을 그래프로 |
-| `laika_debug_view.py` | 음성 인식 디버그 기록 보기 |
 | `build_exe.py` | PyInstaller 빌드. 사전·표정 매핑 등 자료 파일도 함께 복사 |
-
-점검과 측정에 쓴 스크립트(`laika_*_check.py`, `laika_*_test.py`,
-`laika_stream_diag.py`, `laika_vram_log.py`)도 같이 들어 있습니다.
-각 파일 머리말에 무엇을 왜 쟀는지 적어 두었습니다.
 
 UI 와 파이프라인을 분리했습니다. 코어의 콜백은 워커 스레드에서 오므로
 큐를 거쳐 Tk 타이머에서만 위젯을 갱신합니다.

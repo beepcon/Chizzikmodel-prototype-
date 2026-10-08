@@ -54,3 +54,19 @@ laika_latency_check.json
 laika_nospeech_check.json
 laika_stream_diag.json
 laika_tts_mode_sample.json
+
+# ===== 개발하면서 쓴 점검·측정 스크립트 (저장소에 올리지 않는다) =====
+laika_ac_check.py
+laika_emotion_test.py
+laika_emotion_text_test.py
+laika_empty_check.py
+laika_english_llm_test.py
+laika_english_tts_test.py
+laika_latency_check.py
+laika_nospeech_check.py
+laika_stream_diag.py
+laika_tts_mode_sample.py
+laika_verify_stt_fix.py
+laika_vram_log.py
+laika_debug_view.py
+emotion_test_cases.txt
