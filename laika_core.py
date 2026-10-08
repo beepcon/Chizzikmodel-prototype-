@@ -82,6 +82,28 @@ TTS_RESTART_MAX = 2
 # 되살아난 뒤 시청자에게 내보낼 한마디. config.json tts.apology 로 바꿀 수 있다.
 TTS_APOLOGY = "죄송해요, 잠깐 목이 막혔어요."
 
+# 혼잣말. 채팅이 없는 구간에서 라이카가 먼저 말을 꺼낸다.
+# 값은 config.json 의 idle 항목에서 읽고, 없으면 이것을 쓴다.
+# 침묵 30초: 지난 방송 metrics.csv 에서 응답 사이가 30초 넘게 빈 구간이 170회였다 (2026-10-08).
+IDLE_NAME = "방송 안내"
+IDLE_DEFAULTS = {
+    "enabled": True,
+    "silence_sec": 30,
+    # 세 가지를 섞어 쓴다. 같은 방식이 두 번 연속 나오지 않게 고른다.
+    "modes": ["이어가기", "새 화제", "질문"],
+    # {sec} 는 silence_sec 로 바뀐다. 이 안내는 히스토리에도 남으므로
+    # 다음 응답이 안내 문구를 시청자 말로 착각하지 않게 괄호로 감싼다.
+    "prompts": {
+        "이어가기": "({sec}초 넘게 채팅이 없다. 바로 앞에서 나눈 이야기를 자연스럽게 한두 마디 "
+                    "이어서 말해라. 이 안내는 시청자에게 보이지 않으니 언급하지 마라.)",
+        "새 화제": "({sec}초 넘게 채팅이 없다. 방송 분위기에 맞는 새 이야깃거리를 하나 꺼내 "
+                   "한두 마디 말해라. 최근에 한 이야기는 되풀이하지 마라. "
+                   "이 안내는 시청자에게 보이지 않으니 언급하지 마라.)",
+        "질문": "({sec}초 넘게 채팅이 없다. 시청자에게 가볍게 질문을 하나 던져 대화를 "
+                "끌어내라. 이 안내는 시청자에게 보이지 않으니 언급하지 마라.)",
+    },
+}
+
 
 def _tts_fail_reason(e, timeouts=TTS_STREAM_TIMEOUT):
     """실패 원인을 사람이 읽을 말로 바꾼다. 무엇을 해야 하는지까지 적는다.
@@ -279,6 +301,11 @@ class LaikaCore:
         self.chat_queue = collections.deque(maxlen=cfg["chat"]["queue_size"])
         self.host_queue = collections.deque()
         self.vision_queue = collections.deque(maxlen=1)
+        self.idle_queue = collections.deque(maxlen=1)
+        # 마지막으로 무언가 일어난 시각. 응답을 시작·끝냈을 때, 마이크에 목소리가 들어왔을 때 갱신한다.
+        self._last_activity = time.time()
+        self._busy = False               # 워커가 응답을 만드는 중인가
+        self._idle_last_mode = None
 
         # 히스토리 / 표정 / 측정.
         # 셋 다 실패해도 방송은 계속되어야 하므로 여기서는 만들기만 한다.
@@ -1070,6 +1097,10 @@ class LaikaCore:
         if self.vision_queue:
             return self.vision_queue.popleft()
 
+        # 혼잣말은 맨 뒤다. 사람 입력이나 화면이 있으면 그쪽이 먼저다.
+        if self.idle_queue:
+            return self.idle_queue.popleft() + (None,)
+
         return None
 
     async def _worker(self):
@@ -1082,6 +1113,8 @@ class LaikaCore:
                 continue
 
             username, message, image_b64 = item
+            self._busy = True
+            self._last_activity = time.time()
 
             from laika_metrics import Timer
             timer = Timer()
@@ -1124,7 +1157,8 @@ class LaikaCore:
                               + timer.sections.get("first_tts", 0), 3)
             self.metrics.write({
                 "시각": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "종류": "vision" if image_b64 else "chat",
+                "종류": ("vision" if image_b64 else
+                         "idle" if username == IDLE_NAME else "chat"),
                 "입력길이": len(message or ""),
                 "문장수": len(sentences),
                 "llm초": timer.get("llm"),
@@ -1140,6 +1174,54 @@ class LaikaCore:
                          if getattr(timer, "stream_try", 0) else ""),
                 "오류": err,
             })
+            self._busy = False
+            self._last_activity = time.time()
+
+    # ---------------------------------------------------------------- 혼잣말
+
+    def _idle_cfg(self):
+        ic = dict(IDLE_DEFAULTS)
+        ic.update(self.cfg.get("idle") or {})
+        return ic
+
+    def _pick_idle_mode(self, ic):
+        """섞어서 고른다. 직전과 같은 방식은 피하고, 이어갈 대화가 없으면 '이어가기' 를 뺀다."""
+        import random
+        modes = [m for m in (ic.get("modes") or []) if m in (ic.get("prompts") or {})]
+        if not self.history.chat:
+            modes = [m for m in modes if m != "이어가기"]
+        if len(modes) > 1 and self._idle_last_mode in modes:
+            modes = [m for m in modes if m != self._idle_last_mode]
+        return random.choice(modes) if modes else None
+
+    def _idle_ready(self, ic, now=None):
+        """지금 혼잣말을 해도 되는가. 말하는 중·응답 만드는 중·대기 입력이 있으면 안 된다."""
+        if not ic.get("enabled"):
+            return False
+        if self.speaking.is_set() or self._busy:
+            return False
+        if self.host_queue or self.chat_queue or self.vision_queue or self.idle_queue:
+            return False
+        now = time.time() if now is None else now
+        return now - self._last_activity >= float(ic.get("silence_sec", 30))
+
+    async def _idle(self):
+        while self.running:
+            await asyncio.sleep(1.0)
+            try:
+                ic = self._idle_cfg()
+                if not self._idle_ready(ic):
+                    continue
+                mode = self._pick_idle_mode(ic)
+                if mode is None:
+                    continue
+                sec = int(float(ic.get("silence_sec", 30)))
+                self.idle_queue.append((IDLE_NAME, ic["prompts"][mode].format(sec=sec)))
+                self._idle_last_mode = mode
+                self._last_activity = time.time()   # 같은 침묵에 두 번 넣지 않는다
+                self._log("system", f"[혼잣말] {sec}초 동안 입력이 없어 말을 꺼냅니다 (방식: {mode}).")
+            except Exception as e:
+                self._log("error", f"[혼잣말] {type(e).__name__}: {e}")
 
     # ---------------------------------------------------------------- 치지직
 
@@ -1211,6 +1293,8 @@ class LaikaCore:
                 if float(np.abs(block).mean()) > stt["threshold"]:
                     buf.append(block.copy())
                     silence = 0.0
+                    # 호스트가 말하는 동안에는 혼잣말을 꺼내지 않는다
+                    self._last_activity = time.time()
                 elif buf:
                     buf.append(block.copy())
                     silence += 0.1
@@ -1319,7 +1403,7 @@ class LaikaCore:
     # ---------------------------------------------------------------- 수명주기
 
     async def _main(self):
-        await asyncio.gather(self._worker(), self._chzzk(), self._vision())
+        await asyncio.gather(self._worker(), self._chzzk(), self._vision(), self._idle())
 
     def _run(self):
         try:

@@ -103,6 +103,10 @@ DEFAULT_CFG = {
                "max_width": 1024, "jpeg_quality": 70},
     "chat": {"queue_size": 5, "batch": 3},
 
+    # 혼잣말. 채팅이 없으면 라이카가 먼저 말을 꺼낸다. 문구와 방식은 laika_core.IDLE_DEFAULTS 와 같다.
+    # 여기에 적지 않은 값(modes, prompts)은 코어 기본값을 쓴다.
+    "idle": {"enabled": True, "silence_sec": 30},
+
     # 대화 기억. 예전에는 코드에 20 이 박혀 있었고 그것도 턴이 아니라
     # 메시지 개수여서 실제로는 10턴만 기억했다. 이제 턴 단위다.
     # 화면(비전) 은 별도 통이라 채팅 기억을 밀어내지 않는다.
@@ -1374,6 +1378,11 @@ class SettingsWindow(ctk.CTkToplevel):
         self._switch(f, "tts.streaming_mode", "말을 빨리 시작하기",
                      "켜면 합성이 끝나기 전에 앞부분부터 내보냅니다. "
                      "첫 소리까지 4.0초에서 1.5초로 줄었습니다(09-18 측정).")
+        self._switch(f, "idle.enabled", "채팅이 없으면 먼저 말하기",
+                     "아래 시간 동안 입력이 없으면 앞 이야기 잇기·새 화제·질문 중 하나로 말을 꺼냅니다.")
+        self._slider(f, "idle.silence_sec", "먼저 말하기까지 기다리는 시간 (초)",
+                     "30 을 권장합니다. 지난 방송에서 30초 넘게 빈 구간이 170번 있었습니다.",
+                     10, 180, 34, "{:.0f}")
 
         self._section(f, "듣기")
         self._slider(f, "stt.min_rms", "마이크 문턱값",
@@ -1620,7 +1629,7 @@ class SettingsWindow(ctk.CTkToplevel):
     # 켜짐/꺼짐으로 보여주지만 설정에는 숫자로 들어가야 하는 것
     BOOL_AS_INT = ("tts.streaming_mode",)
 
-    INT_KEYS = ("max_tokens", "tts.top_k", "vision.interval_sec",
+    INT_KEYS = ("max_tokens", "tts.top_k", "vision.interval_sec", "idle.silence_sec",
                 "vision.max_width", "chat.queue_size", "chat.batch",
                 "vts.port", "history.chat_turns", "history.vision_turns",
                 "history.resume_within_hours")
