@@ -16,6 +16,9 @@ mss
 pillow
 faster-whisper
 keyboard
+# VTube Studio 연결(laika_vts.py VTSClient). 없으면 표정이 안 바뀐다.
+# 다른 패키지를 깔아도 같이 깔리지 않는다 (2026-10-08 PyPI 의존성 확인).
+websockets
 
 # faster-whisper 를 CUDA 로 돌리기 위한 DLL
 nvidia-cublas-cu12

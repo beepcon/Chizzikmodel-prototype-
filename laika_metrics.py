@@ -60,6 +60,46 @@ class Metrics:
             except Exception as e:
                 if self.log:
                     self.log("error", f"[측정] 파일 생성 실패: {e}")
+        elif self.cfg["enabled"]:
+            self._upgrade_header()
+
+    def _upgrade_header(self):
+        """예전 머리글로 된 파일이면 지금 열 순서로 다시 쓴다.
+
+        write 는 COLUMNS 순서로 줄을 쓰는데, 열이 늘기 전에 만든 파일은
+        머리글이 짧아서 값이 한 칸씩 밀린다.
+        (2026-10-08 확인: 13열 머리글 파일에 14열을 쓰니 '스트리밍' 값이 '오류' 열에 들어갔다)
+        기존 값은 열 이름으로 옮기고, 원본은 .bak_날짜 로 남긴다."""
+        try:
+            with open(self.path, newline="", encoding="utf-8-sig") as f:
+                rows = list(csv.reader(f))
+            if not rows or rows[0] == COLUMNS:
+                return
+            head = rows[0]
+            unknown = [c for c in head if c not in COLUMNS]
+            if unknown:
+                if self.log:
+                    self.log("error", f"[측정] {self.path.name} 머리글에 모르는 열이 있어 "
+                                      f"그대로 둡니다: {unknown}")
+                return
+            backup = self.path.with_name(
+                f"{self.path.name}.bak_{time.strftime('%Y%m%d_%H%M%S')}")
+            backup.write_bytes(self.path.read_bytes())
+            tmp = self.path.with_name(self.path.name + ".tmp")
+            with open(tmp, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.writer(f)
+                w.writerow(COLUMNS)
+                for r in rows[1:]:
+                    d = dict(zip(head, r))
+                    w.writerow([d.get(c, "") for c in COLUMNS])
+            tmp.replace(self.path)
+            if self.log:
+                self.log("system", f"[측정] {self.path.name} 머리글을 새 열 순서로 바꿨습니다 "
+                                   f"({len(head)}열 -> {len(COLUMNS)}열, {len(rows) - 1}줄). "
+                                   f"원본: {backup.name}")
+        except Exception as e:
+            if self.log:
+                self.log("error", f"[측정] 머리글 갱신 실패: {type(e).__name__}: {e}")
 
     def write(self, row: dict):
         """한 응답의 측정값을 한 줄 기록한다. 실패해도 방송을 막지 않는다."""

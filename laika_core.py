@@ -83,19 +83,24 @@ TTS_RESTART_MAX = 2
 TTS_APOLOGY = "죄송해요, 잠깐 목이 막혔어요."
 
 
-def _tts_fail_reason(e):
-    """실패 원인을 사람이 읽을 말로 바꾼다. 무엇을 해야 하는지까지 적는다."""
+def _tts_fail_reason(e, timeouts=TTS_STREAM_TIMEOUT):
+    """실패 원인을 사람이 읽을 말로 바꾼다. 무엇을 해야 하는지까지 적는다.
+
+    timeouts 는 그 요청에 건 (연결, 응답) 한도다. 기존 방식은 TTS_PLAIN_TIMEOUT 을 넘긴다.
+    (예전에는 기존 방식이 60초를 기다렸는데도 "15초" 라고 적혔다)"""
     import requests
     name = type(e).__name__
+    # ConnectTimeout 은 ConnectionError 의 하위 클래스다. 먼저 봐야 한다.
+    # (예전 순서에서는 연결 시간 초과도 "서버가 꺼져 있습니다" 로 나왔다)
+    if isinstance(e, requests.exceptions.ConnectTimeout):
+        return (f"{timeouts[0]}초 안에 연결되지 않았습니다. "
+                f"TTS 서버를 껐다 켜 주세요. ({name})")
     if isinstance(e, requests.exceptions.ConnectionError):
         return ("서버에 연결되지 않습니다. TTS 서버가 꺼져 있습니다. "
                 f"서버를 켜 주세요. ({name})")
     if isinstance(e, requests.exceptions.ReadTimeout):
-        return (f"연결은 됐는데 {TTS_STREAM_TIMEOUT[1]}초 동안 소리가 오지 않았습니다. "
+        return (f"연결은 됐는데 {timeouts[1]}초 동안 소리가 오지 않았습니다. "
                 f"서버가 멈췄습니다. TTS 서버를 껐다 켜 주세요. ({name})")
-    if isinstance(e, requests.exceptions.ConnectTimeout):
-        return (f"{TTS_STREAM_TIMEOUT[0]}초 안에 연결되지 않았습니다. "
-                f"TTS 서버를 껐다 켜 주세요. ({name})")
     if isinstance(e, requests.exceptions.HTTPError):
         code = getattr(getattr(e, "response", None), "status_code", "?")
         return f"서버가 오류로 답했습니다(HTTP {code}). 보낸 글이나 설정값을 봐야 합니다. ({name})"
@@ -301,6 +306,8 @@ class LaikaCore:
         self._tts_lock = threading.Lock()
         self._tts_restarts = 0          # 이번 방송에서 껐다 켠 횟수
         self._tts_apology_due = False   # 되살아난 뒤 사과 한마디가 밀려 있는가
+        # 마지막 스트리밍 실패가 "서버가 멈춘 것" 인지. _speak 가 보고 갈 길을 고른다.
+        self._stream_frozen = False
 
         self.speaking = threading.Event()   # 라이카가 말하는 중
         self.mic_on = threading.Event()     # 마이크 토글 (기본 꺼짐)
@@ -374,7 +381,9 @@ class LaikaCore:
                   f"({self._tts_restarts}/{TTS_RESTART_MAX}). 잠시 소리가 끊깁니다.")
         self._status("tts", "껐다 켜는 중")
         try:
-            self._kill_server()
+            # 미리 켜 둔 서버(인수인계 2장 방식)는 server_proc 이 없어서
+            # 예전에는 끄지 못했고, _start_server 가 멈춘 서버를 그대로 다시 썼다.
+            self._kill_server(include_external=True)
         except Exception as e:
             self._log("error", f"[TTS] 서버 종료 실패: {type(e).__name__}: {e}")
         time.sleep(1.0)
@@ -793,8 +802,10 @@ class LaikaCore:
         expr_took = 0.0
         self.speaking.set()
         self._status("busy", True)
+        self._stream_frozen = False
         locked = self._tts_lock.acquire(timeout=TTS_LOCK_WAIT)
         if not locked:
+            self._stream_frozen = True
             self.speaking.clear()
             self._status("busy", False)
             self._log("error",
@@ -861,6 +872,7 @@ class LaikaCore:
             r.close()
 
             if first_at is None:
+                self._stream_frozen = True
                 self._log("error",
                           "[TTS] 서버가 소리를 보내지 않았습니다. "
                           "서버가 멈춘 것으로 보입니다. TTS 서버를 껐다 켜 주세요.")
@@ -870,6 +882,13 @@ class LaikaCore:
             self._tts_restarts = 0      # 정상으로 돌아왔으니 횟수를 되돌린다
             return first_at, expr_took
         except Exception as e:
+            import requests
+            if isinstance(e, (requests.exceptions.ReadTimeout,
+                              requests.exceptions.ConnectTimeout)):
+                self._stream_frozen = True
+                self._log("error", "[TTS] 스트리밍 실패. " + _tts_fail_reason(e))
+                self._status("tts", "응답 없음")
+                return None
             self._log("error", "[TTS] 스트리밍 실패, 기존 방식으로 넘어갑니다. "
                                + _tts_fail_reason(e))
             self._status("tts", "응답 없음")
@@ -964,14 +983,11 @@ class LaikaCore:
                             timer.add("first_tts", el)
                         timer.add("expr", expr_took)
                     continue
-                # 이 문장만 기존 방식으로 되돌아간다
-                try:
-                    data, sr = await loop.run_in_executor(None, self._tts, text)
-                except Exception as e:
-                    self._log("error", "[TTS] 기존 방식도 실패했습니다. "
-                                       + _tts_fail_reason(e))
-                    self._status("tts", "응답 없음")
-                    # 서버를 껐다 켜고 이 문장부터 다시 해 본다
+                # 서버가 멈춘 것이면 기존 방식으로 넘어가도 응답 한도(60초)만큼
+                # 더 기다리게 된다. (예전: 스트리밍 15초 + 기존 방식 60초 = 75초 침묵)
+                # 그래서 바로 껐다 켜고 이 문장부터 다시 한다.
+                if self._stream_frozen:
+                    self._log("system", "[TTS] 서버가 멈춘 것으로 보고 기존 방식은 건너뜁니다.")
                     if not await loop.run_in_executor(None, self._tts_recover):
                         break
                     try:
@@ -979,8 +995,26 @@ class LaikaCore:
                             None, self._tts, text)
                     except Exception as e2:
                         self._log("error", "[TTS] 되살린 뒤에도 실패했습니다. "
-                                           + _tts_fail_reason(e2))
+                                           + _tts_fail_reason(e2, TTS_PLAIN_TIMEOUT))
                         break
+                else:
+                    # 이 문장만 기존 방식으로 되돌아간다
+                    try:
+                        data, sr = await loop.run_in_executor(None, self._tts, text)
+                    except Exception as e:
+                        self._log("error", "[TTS] 기존 방식도 실패했습니다. "
+                                           + _tts_fail_reason(e, TTS_PLAIN_TIMEOUT))
+                        self._status("tts", "응답 없음")
+                        # 서버를 껐다 켜고 이 문장부터 다시 해 본다
+                        if not await loop.run_in_executor(None, self._tts_recover):
+                            break
+                        try:
+                            data, sr = await loop.run_in_executor(
+                                None, self._tts, text)
+                        except Exception as e2:
+                            self._log("error", "[TTS] 되살린 뒤에도 실패했습니다. "
+                                               + _tts_fail_reason(e2, TTS_PLAIN_TIMEOUT))
+                            break
                 if timer is not None and i == 0:
                     timer.add("first_tts", time.time() - t0)
                 await _face(i)
@@ -992,7 +1026,7 @@ class LaikaCore:
                     data, sr = await nxt
                 except Exception as e:
                     self._log("error", "[TTS] 합성에 실패했습니다. "
-                                       + _tts_fail_reason(e))
+                                       + _tts_fail_reason(e, TTS_PLAIN_TIMEOUT))
                     self._status("tts", "응답 없음")
                     if not await loop.run_in_executor(None, self._tts_recover):
                         break
@@ -1001,7 +1035,7 @@ class LaikaCore:
                             None, self._tts, texts[i])
                     except Exception as e2:
                         self._log("error", "[TTS] 되살린 뒤에도 실패했습니다. "
-                                           + _tts_fail_reason(e2))
+                                           + _tts_fail_reason(e2, TTS_PLAIN_TIMEOUT))
                         break
                 if timer is not None and i == 0:
                     timer.add("first_tts", time.time() - t0)
@@ -1371,8 +1405,49 @@ class LaikaCore:
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
-    def _kill_server(self):
+    @staticmethod
+    def _listening_pids(netstat_text, port):
+        """netstat -ano -p tcp 출력에서 그 포트를 듣고 있는 PID 를 찾는다.
+
+        상태 글자(LISTENING)는 언어판마다 다를 수 있어 보지 않는다.
+        상대 주소가 0.0.0.0:0 / [::]:0 이면 듣는 중이다."""
+        pids = set()
+        for line in netstat_text.splitlines():
+            parts = line.split()
+            if len(parts) < 4 or parts[0].upper() != "TCP":
+                continue
+            local, remote, pid = parts[1], parts[2], parts[-1]
+            if local.rsplit(":", 1)[-1] == str(port) and remote in ("0.0.0.0:0", "[::]:0") \
+                    and pid.isdigit() and int(pid) not in (0, os.getpid()):
+                pids.add(int(pid))
+        return sorted(pids)
+
+    def _kill_external_server(self):
+        """라이카가 띄우지 않은 TTS 서버를 포트로 찾아 끈다. 복구할 때만 쓴다."""
+        if os.name != "nt":
+            return []
+        try:
+            port = int(self.cfg["sovits_url"].split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[1])
+        except Exception:
+            port = 9880
+        out = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True,
+                             text=True, errors="replace",
+                             creationflags=subprocess.CREATE_NO_WINDOW).stdout
+        pids = self._listening_pids(out, port)
+        for pid in pids:
+            self._log("system", f"[TTS] 미리 켜 둔 서버를 끕니다 (PID {pid}, 포트 {port}).")
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        # 포트가 풀릴 때까지 기다린다. 안 풀리면 _start_server 가 멈춘 서버를 다시 쓴다.
+        for _ in range(20):
+            if not self._server_alive():
+                break
+            time.sleep(0.5)
+        return pids
+
+    def _kill_server(self, include_external=False):
         """자기가 띄운 서버만 종료한다.
+        include_external=True 면 미리 켜 둔 서버도 포트로 찾아 끈다(복구 전용).
 
         api_v2.py 는 uvicorn 서버라 terminate() 를 무시하고 버티는 경우가 있고,
         자식 프로세스를 띄우면 부모만 죽고 자식이 남는다.
@@ -1381,6 +1456,8 @@ class LaikaCore:
         proc = self.server_proc
         self.server_proc = None
         if not proc or proc.poll() is not None:
+            if include_external:
+                self._kill_external_server()
             return
 
         self._log("system", "TTS 서버를 종료합니다.")

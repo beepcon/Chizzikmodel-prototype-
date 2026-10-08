@@ -70,3 +70,10 @@ laika_verify_stt_fix.py
 laika_vram_log.py
 laika_debug_view.py
 emotion_test_cases.txt
+laika_win_check.py
+laika_win_check.bat
+laika_win_check.json
+laika_release.py
+laika_release.bat
+laika_release.json
+*.tmp

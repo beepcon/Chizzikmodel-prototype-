@@ -82,7 +82,7 @@ DEFAULT_CFG = {
     # apology 는 TTS 서버를 껐다 켠 뒤 라이카가 먼저 하는 한마디다.
     # apology_emotion 은 그때 지을 표정. 모델에 없으면 준비물 점검에서 알려 준다.
     "tts": {"top_k": 34, "top_p": 0.9, "temperature": 0.8, "streaming_mode": 1,
-            "apology": "죄송해요, 잠깐 목이 막혔어요.", "apology_emotion": "사과"},
+            "apology": "죄송해요, 잠깐 목이 막혔어요.", "apology_emotion": "슬픔"},
     # 화면 로그를 파일로도 남긴다. 방송 뒤에 원인을 되짚을 때 쓴다.
     "laika_log": {"enabled": True, "file": "laika.log", "max_mb": 20},
     "audio": {"cable_device_name": "CABLE Input",
@@ -820,11 +820,9 @@ class SetupWindow(ctk.CTkToplevel):
                 text_color=MUTED)
         else:
             self.expr_note.configure(
-                text=("사과 표정이 없습니다. TTS 서버를 껐다 켠 뒤 라이카가 사과할 때 쓸 표정입니다.\n"
-                      "VTube Studio 에서 사과 표정을 만들고 핫키를 추가한 다음, "
-                      "vts_emotion_map.json 의 "
-                      f"'{apo}' 항목에 그 핫키 이름을 적어 주세요."),
-                text_color=DANGER)
+                text=(f"사과할 때 쓸 표정 '{apo}' 가 핫키에 연결돼 있지 않습니다. "
+                      "표정 없이 말만 합니다."),
+                text_color=MUTED)
 
         note = ("방송 중입니다. 여기서 누른 표정은 라이카가 추적하는 상태에 함께 반영됩니다."
                 if self._core_expression() is not None else
