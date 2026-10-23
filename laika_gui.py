@@ -107,6 +107,11 @@ DEFAULT_CFG = {
     # 여기에 적지 않은 값(modes, prompts)은 코어 기본값을 쓴다.
     "idle": {"enabled": True, "silence_sec": 30},
 
+    # 대사를 만드는 곳. anthropic 이면 지금처럼 API, local 이면 OpenAI 호환 서버(Ollama 등).
+    # local_extra 같은 나머지 값은 laika_llm.DEFAULTS 를 쓴다.
+    "llm": {"backend": "anthropic", "local_url": "http://127.0.0.1:11434/v1",
+            "local_model": ""},
+
     # 대화 기억. 예전에는 코드에 20 이 박혀 있었고 그것도 턴이 아니라
     # 메시지 개수여서 실제로는 10턴만 기억했다. 이제 턴 단위다.
     # 화면(비전) 은 별도 통이라 채팅 기억을 밀어내지 않는다.
@@ -1405,6 +1410,14 @@ class SettingsWindow(ctk.CTkToplevel):
                     "console.anthropic.com 에서 발급합니다. 이 값은 config.json 에 저장되니 "
                     "파일을 공유하지 마세요.", show="●")
         self._entry(f, "model", "모델", "기본값을 그대로 두면 됩니다.")
+        self._option(f, "llm.backend", "대사를 만드는 곳",
+                     "anthropic: Anthropic API.  local: 로컬 LLM 서버(Ollama·llama.cpp 등). "
+                     "방송을 다시 시작해야 바뀝니다.", ["anthropic", "local"])
+        self._entry(f, "llm.local_url", "로컬 LLM 서버 주소",
+                    "Ollama 는 http://127.0.0.1:11434/v1, llama.cpp 서버는 보통 http://127.0.0.1:8080/v1. "
+                    "다른 PC 면 그 PC 의 주소를 적습니다.")
+        self._entry(f, "llm.local_model", "로컬 모델 이름",
+                    "서버에 올린 모델 이름 그대로. 예) Ollama 에서 받은 이름")
         self._entry(f, "chzzk_channel_id", "치지직 채널 ID",
                     "채널 주소 chzzk.naver.com/ 뒤에 오는 문자열. "
                     "비우면 채팅 연동을 하지 않습니다.")

@@ -76,4 +76,7 @@ laika_win_check.json
 laika_release.py
 laika_release.bat
 laika_release.json
+laika_llm_check.py
+laika_llm_check.bat
+laika_llm_check.json
 *.tmp

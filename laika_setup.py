@@ -123,15 +123,23 @@ def check_all(cfg: dict):
     items = []
     prog = program_dir()
 
-    # 1) API 키
+    # 1) API 키. 로컬 LLM 을 쓰면 필요 없다.
     has_key = bool(cfg.get("api_key", "").strip())
-    items.append({
-        "key": "apikey", "name": "Anthropic API 키",
-        "ok": has_key,
-        "detail": "입력됨" if has_key else "입력되지 않음",
-        "hint": "대사를 만드는 데 씁니다. 발급 후 설정 - 연결 탭에 붙여넣으세요.",
-        "action": "none" if has_key else "link", "link": LINKS["apikey"],
-    })
+    if ((cfg.get("llm") or {}).get("backend") or "anthropic") == "local":
+        items.append({
+            "key": "apikey", "name": "Anthropic API 키", "ok": True,
+            "detail": "로컬 LLM 사용 중이라 필요 없음",
+            "hint": "설정 - 연결 탭의 '대사를 만드는 곳' 이 local 입니다.",
+            "action": "none", "link": LINKS["apikey"],
+        })
+    else:
+        items.append({
+            "key": "apikey", "name": "Anthropic API 키",
+            "ok": has_key,
+            "detail": "입력됨" if has_key else "입력되지 않음",
+            "hint": "대사를 만드는 데 씁니다. 발급 후 설정 - 연결 탭에 붙여넣으세요.",
+            "action": "none" if has_key else "link", "link": LINKS["apikey"],
+        })
 
     # 2) GPT-SoVITS
     cur = cfg.get("sovits_dir", "")

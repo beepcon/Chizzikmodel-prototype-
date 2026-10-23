@@ -341,6 +341,7 @@ class LaikaCore:
         self.vision_on = threading.Event()
 
         self.client = None
+        self.llm = None          # laika_llm 백엔드. 방송을 시작할 때 만든다
         self.stt_model = None
         self.cable_device = None
         self._stop_flag = threading.Event()
@@ -353,8 +354,9 @@ class LaikaCore:
         problems = []
         c = self.cfg
 
-        if not c.get("api_key", "").strip():
-            problems.append("Anthropic API 키가 비어 있습니다.")
+        # 대사를 만드는 곳에 따라 필요한 것이 다르다 (Anthropic: API 키 / 로컬: 서버 주소·모델 이름)
+        from laika_llm import preflight as llm_preflight
+        problems.extend(llm_preflight(c))
 
         sovits = Path(c.get("sovits_dir", ""))
         if not c.get("sovits_dir"):
@@ -588,8 +590,10 @@ class LaikaCore:
                                           self.emotion_map.default)]
             kwargs["tool_choice"] = {"type": "tool", "name": "speak"}
 
+        # 요청은 Anthropic 형식 그대로 만들고, 보내는 곳은 laika_llm 이 고른다.
+        # (config.json llm.backend: anthropic / local)
         t0 = time.time()
-        resp = self.client.messages.create(**kwargs)
+        res = self.llm.create(kwargs)
         if timer is not None:
             timer.add("llm", time.time() - t0)
 
@@ -597,16 +601,11 @@ class LaikaCore:
         # 검증(laika_empty_check.json, 45회): max_tokens=200 에서 15회 중 6회가
         # stop_reason="max_tokens", output_tokens=200, tool_use.input 이 빈 채로 왔다.
         # 400/800 에서는 0회. 출력은 126~250 토큰이었다.
-        stop_reason = getattr(resp, "stop_reason", "") or ""
-        _usage = getattr(resp, "usage", None)
-        out_tokens = getattr(_usage, "output_tokens", None) if _usage else None
+        stop_reason = res.stop_reason
+        out_tokens = res.output_tokens
 
-        sentences, fallback = [], ""
-        for block in resp.content:
-            if getattr(block, "type", "") == "tool_use" and block.name == "speak":
-                sentences = list(block.input.get("sentences", []))
-            elif getattr(block, "type", "") == "text":
-                fallback += block.text
+        sentences = list((res.tool_input or {}).get("sentences", []) or [])
+        fallback = res.text
 
         tool_used = bool(sentences)
         if not tool_used:
@@ -1407,10 +1406,13 @@ class LaikaCore:
 
     def _run(self):
         try:
-            import anthropic
             from faster_whisper import WhisperModel
+            from laika_llm import make_backend, llm_cfg
 
-            self.client = anthropic.Anthropic(api_key=self.cfg["api_key"])
+            self.llm = make_backend(self.cfg)
+            _lc = llm_cfg(self.cfg)
+            self._log("system", "대사: " + ("Anthropic API" if self.llm.name == "anthropic"
+                                         else f"로컬 서버 {_lc['local_url']} ({_lc['local_model']})"))
 
             if not self._start_server():
                 self.running = False

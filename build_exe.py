@@ -57,6 +57,7 @@ def build():
         "--hidden-import", "laika_refmaker",
         "--hidden-import", "laika_setup",
         "--hidden-import", "laika_capture",
+        "--hidden-import", "laika_llm",
         "--hidden-import", "anthropic",
         "--hidden-import", "chzzkpy",
         "--hidden-import", "chzzkpy.unofficial",
